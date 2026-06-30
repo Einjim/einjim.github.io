@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Academic Portfolio</title>
+    <style>
+        /* Modern, clean academic design */
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; margin: 0; color: #333; display: flex; flex-wrap: wrap; background-color: #f9f9f9;}
+        .sidebar { background: #2c3e50; color: #fff; width: 300px; padding: 3rem 2rem; text-align: center; min-height: 100vh; }
+        .sidebar img { width: 160px; height: 160px; border-radius: 50%; object-fit: cover; border: 4px solid #ecf0f1; margin-bottom: 1rem; }
+        .sidebar h1 { margin-bottom: 0.2rem; font-size: 1.8rem; }
+        .sidebar p { font-size: 0.95rem; color: #bdc3c7; margin-bottom: 2rem; }
+        .sidebar a { color: #3498db; text-decoration: none; display: block; margin: 0.8rem 0; font-size: 1.1rem;}
+        .sidebar a:hover { color: #ecf0f1; }
+        .content { flex: 1; padding: 4rem; max-width: 850px; background: #fff; box-shadow: 0 0 20px rgba(0,0,0,0.05); }
+        h2 { color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 0.5rem; margin-top: 2.5rem; }
+        h2:first-child { margin-top: 0; }
+        .item { margin-bottom: 1.5rem; }
+        .item h3 { margin: 0 0 0.3rem 0; color: #34495e; font-size: 1.2rem; }
+        .item p { margin: 0; color: #555; }
+        .date { font-size: 0.9rem; color: #7f8c8d; font-style: italic; margin-top: 0.2rem !important; }
+        .pub-links a { color: #e67e22; text-decoration: none; font-weight: bold; font-size: 0.9rem; margin-right: 10px; }
+        .pub-links a:hover { text-decoration: underline; }
+        @media (max-width: 768px) {
+            .sidebar { width: 100%; min-height: auto; padding: 2rem 1rem; }
+            .content { padding: 2rem; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- SIDEBAR (Your Photo, Name, and Links) -->
+    <div class="sidebar">
+        <!-- Replace the link below with your actual photo link later -->
+        <img src="https://via.placeholder.com/160" alt="Profile Picture">
+        <h1>Your Full Name</h1>
+        <p>Ph.D. Candidate / Researcher<br>at University of Example</p>
+        
+        <a href="mailto:your.email@example.com">📧 Email Me</a>
+        <a href="https://scholar.google.com/" target="_blank">🎓 Google Scholar</a>
+        <a href="https://linkedin.com/" target="_blank">💼 LinkedIn</a>
+        <a href="https://github.com/" target="_blank">💻 GitHub</a>
+    </div>
+
+    <!-- MAIN CONTENT (Your Resume details) -->
+    <div class="content">
+        
+        <h2>About Me</h2>
+        <p>Hello! I am a researcher specializing in [Your Field, e.g., Machine Learning and Data Science]. My research focuses on [briefly explain your research interest in 2-3 sentences]. I am passionate about solving real-world problems through scientific methods.</p>
+        
+        <h2>Education</h2>
+        <div class="item">
+            <h3>Ph.D. in [Your Major]</h3>
+            <p>University of Example, City, Country</p>
+            <p class="date">2020 - Present</p>
+        </div>
+        <div class="item">
+            <h3>M.Sc. in [Your Major]</h3>
+            <p>University of Example, City, Country</p>
+            <p class="date">2017 - 2019</p>
+        </div>
+
+        <h2>Selected Publications</h2>
+        <div class="item">
+            <h3>Title of Your Best Paper goes here</h3>
+            <p><strong>Your Name</strong>, Co-author Name, Professor Name. <em>Name of the Journal/Conference</em>.</p>
+            <p class="pub-links"><a href="#" target="_blank">[PDF]</a> <a href="#" target="_blank">[Code]</a></p>
+        </div>
+        <div class="item">
+            <h3>Title of Your Second Paper goes here</h3>
+            <p>Co-author Name, <strong>Your Name</strong>. <em>Name of the Journal/Conference</em>.</p>
+            <p class="pub-links"><a href="#" target="_blank">[PDF]</a> <a href="#" target="_blank">[Publisher Link]</a></p>
+        </div>
+
+        <h2>Skills & Tools</h2>
+        <p><strong>Programming:</strong> Python, R, MATLAB, C++</p>
+        <p><strong>Languages:</strong> Persian (Native), English (Fluent)</p>
+
+    </div>
+
+</body>
+</html>
