@@ -1,83 +1,1365 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>My Academic Portfolio</title>
-    <style>
-        /* Modern, clean academic design */
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; margin: 0; color: #333; display: flex; flex-wrap: wrap; background-color: #f9f9f9;}
-        .sidebar { background: #2c3e50; color: #fff; width: 300px; padding: 3rem 2rem; text-align: center; min-height: 100vh; }
-        .sidebar img { width: 160px; height: 160px; border-radius: 50%; object-fit: cover; border: 4px solid #ecf0f1; margin-bottom: 1rem; }
-        .sidebar h1 { margin-bottom: 0.2rem; font-size: 1.8rem; }
-        .sidebar p { font-size: 0.95rem; color: #bdc3c7; margin-bottom: 2rem; }
-        .sidebar a { color: #3498db; text-decoration: none; display: block; margin: 0.8rem 0; font-size: 1.1rem;}
-        .sidebar a:hover { color: #ecf0f1; }
-        .content { flex: 1; padding: 4rem; max-width: 850px; background: #fff; box-shadow: 0 0 20px rgba(0,0,0,0.05); }
-        h2 { color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 0.5rem; margin-top: 2.5rem; }
-        h2:first-child { margin-top: 0; }
-        .item { margin-bottom: 1.5rem; }
-        .item h3 { margin: 0 0 0.3rem 0; color: #34495e; font-size: 1.2rem; }
-        .item p { margin: 0; color: #555; }
-        .date { font-size: 0.9rem; color: #7f8c8d; font-style: italic; margin-top: 0.2rem !important; }
-        .pub-links a { color: #e67e22; text-decoration: none; font-weight: bold; font-size: 0.9rem; margin-right: 10px; }
-        .pub-links a:hover { text-decoration: underline; }
-        @media (max-width: 768px) {
-            .sidebar { width: 100%; min-height: auto; padding: 2rem 1rem; }
-            .content { padding: 2rem; }
-        }
-    </style>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+<title>Neighborhood Map</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden;font-family:'Nunito',sans-serif;background:#1a1a2e}
+
+#map{position:fixed;inset:0;z-index:1}
+.leaflet-control-zoom,.leaflet-control-attribution{display:none!important}
+
+/* PAINT CANVAS */
+#paintCanvas{
+  position:fixed;inset:0;z-index:2;
+  pointer-events:none;
+}
+#paintCanvas.active{pointer-events:all;cursor:crosshair}
+
+/* SEARCH BAR */
+.search-bar{
+  position:fixed;top:12px;left:50%;transform:translateX(-50%);
+  z-index:500;display:flex;align-items:center;
+  background:#fff;border-radius:8px;box-shadow:0 2px 14px rgba(0,0,0,.4);
+  width:min(380px,calc(100vw - 130px));
+}
+.search-icon{padding:10px 12px;color:#888;font-size:15px;flex-shrink:0}
+.search-bar input{
+  flex:1;border:none;outline:none;font-size:14px;font-family:inherit;
+  font-weight:600;color:#333;background:transparent;padding:10px 4px;min-width:0
+}
+.search-bar input::placeholder{color:#bbb;font-weight:400}
+.search-clear{padding:10px 12px;cursor:pointer;color:#aaa;font-size:13px;display:none;flex-shrink:0}
+.search-results{
+  position:absolute;top:calc(100% + 5px);left:0;right:0;
+  background:#fff;border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,.22);
+  display:none;max-height:260px;overflow-y:auto;z-index:600
+}
+.search-result-item{
+  padding:10px 14px;cursor:pointer;display:flex;align-items:center;gap:10px;
+  font-size:13px;font-weight:600;border-bottom:1px solid #f0f0f0
+}
+.search-result-item:last-child{border-bottom:none}
+.search-result-item:hover{background:#f5f5f5}
+.search-result-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.search-result-sub{margin-left:auto;color:#aaa;font-size:11px;font-weight:400}
+
+/* TOP LEFT */
+.top-left{position:fixed;top:12px;left:12px;z-index:500;display:flex;flex-direction:column;gap:6px}
+.map-btn{
+  background:#fff;color:#333;border:none;cursor:pointer;
+  border-radius:6px;padding:8px 13px;font-size:12.5px;font-weight:700;
+  box-shadow:0 2px 10px rgba(0,0,0,.3);font-family:inherit;
+  display:flex;align-items:center;gap:6px;white-space:nowrap;
+  transition:background .12s,color .12s
+}
+.map-btn:hover{background:#f0f0f0}
+.map-btn.active{background:#222;color:#fff}
+
+select.map-btn {
+  appearance: auto;
+  -webkit-appearance: auto;
+  cursor: pointer;
+  outline: none;
+}
+
+/* TOP RIGHT */
+.top-right{
+  position:fixed;top:12px;right:12px;z-index:500;
+  display:flex;flex-direction:column;gap:8px;align-items:center
+}
+.icon-btn{
+  width:44px;height:44px;border-radius:50%;background:#fff;border:none;cursor:pointer;
+  box-shadow:0 2px 10px rgba(0,0,0,.3);font-size:20px;
+  display:flex;align-items:center;justify-content:center;
+  transition:background .12s,transform .1s
+}
+.icon-btn:hover{transform:scale(1.08)}
+.icon-btn.active{background:#222;color:#fff}
+
+/* ZOOM */
+.zoom-btns{position:fixed;right:12px;bottom:80px;z-index:500;display:flex;flex-direction:column;gap:4px}
+.zoom-btn{
+  width:38px;height:38px;background:#fff;border:none;cursor:pointer;
+  border-radius:6px;font-size:20px;font-weight:700;
+  box-shadow:0 2px 10px rgba(0,0,0,.25);display:flex;align-items:center;
+  justify-content:center;color:#333;transition:background .1s
+}
+.zoom-btn:hover{background:#f0f0f0}
+
+/* BOTTOM COLOR BAR */
+.color-picker-bar{
+  position:fixed;bottom:0;left:0;right:0;z-index:500;
+  display:flex;background:#fff;
+  border-top:1px solid #dde1e8;overflow-x:auto;
+  box-shadow:0 -3px 14px rgba(0,0,0,.15);
+  padding-bottom:env(safe-area-inset-bottom,0px)
+}
+.color-picker-bar::-webkit-scrollbar{height:0}
+.cat-btn{
+  flex:1 0 auto;min-width:80px;border:none;cursor:pointer;
+  padding:10px 6px 11px;font-family:inherit;font-weight:800;font-size:12.5px;
+  display:flex;flex-direction:column;align-items:center;gap:4px;
+  color:#fff;background:var(--cc,#555);
+  opacity:.42;transition:opacity .15s,transform .12s;position:relative
+}
+.cat-btn .cat-emoji{font-size:17px;line-height:1}
+.cat-btn:hover{opacity:.75}
+.cat-btn.on{opacity:1}
+.cat-btn.paint-selected{
+  opacity:1!important;transform:translateY(-5px);
+  outline:3px solid #fff;outline-offset:-2px
+}
+.paint-active .cat-btn:not(.paint-selected){opacity:.28}
+.paint-active .cat-btn:not(.paint-selected):hover{opacity:.6}
+
+/* MODE HINT */
+.mode-hint{
+  position:fixed;top:62px;left:50%;transform:translateX(-50%);
+  z-index:600;background:#222;color:#fff;
+  padding:9px 18px;border-radius:999px;font-size:13px;font-weight:700;
+  box-shadow:0 4px 16px rgba(0,0,0,.5);display:none;
+  align-items:center;gap:12px;white-space:nowrap;max-width:calc(100vw - 24px)
+}
+.mode-hint.show{display:flex}
+.mode-hint .done-btn{
+  background:rgba(255,255,255,.2);border:none;color:#fff;
+  padding:3px 12px;border-radius:999px;cursor:pointer;
+  font-weight:700;font-size:12px;font-family:inherit
+}
+
+/* BRUSH CURSOR — SQUARE (no border-radius) */
+.brush-cursor{
+  position:fixed;border-radius:2px;border:2px solid #fff;
+  box-shadow:0 0 0 1px rgba(0,0,0,.5);
+  pointer-events:none;z-index:600;display:none;
+  transform:translate(-50%,-50%);
+}
+
+/* TAG PINS */
+.tag-wrap{background:transparent!important;border:none!important;overflow:visible!important}
+.tag-pin{display:flex;flex-direction:column;align-items:center;cursor:default;user-select:none}
+.tag-votes{
+  display:flex;align-items:center;
+  background:rgba(255,255,255,.93);border-radius:999px;
+  padding:4px 8px;font-size:12px;font-weight:900;color:#222;
+  box-shadow:0 2px 8px rgba(0,0,0,.2);margin-bottom:3px;white-space:nowrap
+}
+.tag-votes .vote-count{
+  min-width:22px;text-align:center;font-size:13px;font-weight:900;
+  transition: margin .2s;
+}
+.tag-votes button{
+  width:0;height:26px;border-radius:50%;border:none;cursor:pointer;
+  background:#f0f0f0;font-size:14px;display:flex;align-items:center;
+  justify-content:center;padding:0;line-height:1;
+  transition:width .2s,opacity .2s,background .1s,transform .1s;
+  opacity:0;pointer-events:none;overflow:hidden;white-space:nowrap;
+}
+.tag-votes button:hover{background:#e0e0e0;transform:scale(1.15)}
+.tag-votes button[data-act="up"]:hover{background:#d4f0d4}
+.tag-votes button[data-act="down"]:hover{background:#f0d4d4}
+
+/* Reveal buttons & spacing on hover/expand */
+.tag-pin:hover .tag-votes button,
+.tag-pin.expanded .tag-votes button{
+  width:26px;opacity:1;pointer-events:auto;
+}
+.tag-pin:hover .tag-votes .vote-count,
+.tag-pin.expanded .tag-votes .vote-count{
+  margin:0 5px;
+}
+
+.tag-label{
+  font-family:'Nunito',sans-serif;font-weight:900;color:#fff;white-space:nowrap;line-height:1;
+  text-shadow:1.5px 0 #111,-1.5px 0 #111,0 1.5px #111,0 -1.5px #111,
+              1.5px 1.5px #111,-1.5px -1.5px #111,1.5px -1.5px #111,-1.5px 1.5px #111
+}
+
+/* Hidden by default, shown on click/hover */
+.tag-time{
+  font-size:10px;color:#222;background:rgba(255,255,255,.85);
+  border-radius:999px;
+  max-height:0;padding:0 7px;margin-top:0;opacity:0;pointer-events:none;overflow:hidden;
+  transition:max-height .2s,padding .2s,margin .2s,opacity .2s;
+}
+.tag-pin:hover .tag-time,
+.tag-pin.expanded .tag-time{
+  max-height:20px;padding:1px 7px;margin-top:3px;opacity:1;
+}
+
+.tag-del{
+  margin-top:0;font-size:10px;font-weight:700;color:#fff;
+  background:rgba(0,0,0,.55);border:none;border-radius:999px;cursor:pointer;
+  height:0;padding:0 9px;opacity:0;pointer-events:none;overflow:hidden;
+  transition:height .2s,padding .2s,margin .2s,opacity .2s;
+}
+.tag-pin:hover .tag-del,
+.tag-pin.expanded .tag-del{
+  height:18px;padding:2px 9px;margin-top:3px;opacity:1;pointer-events:auto;
+}
+
+/* TAG FORM */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:800;display:none}
+.overlay.show{display:block}
+.tag-form{
+  position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
+  z-index:810;background:#fff;border-radius:16px;padding:22px;
+  width:min(340px,90vw);box-shadow:0 16px 48px rgba(0,0,0,.35);display:none
+}
+.tag-form.show{display:block}
+.tag-form h2{font-size:18px;font-weight:900;margin-bottom:4px}
+.tag-form .sub{font-size:12px;color:#888;margin-bottom:14px;line-height:1.5}
+.tag-form label{font-size:12px;font-weight:700;color:#666;display:block;margin-bottom:6px}
+.tag-form input[type=text]{
+  width:100%;border:1.5px solid #e0e0e0;border-radius:10px;
+  padding:10px 12px;font-size:14px;font-family:inherit;outline:none;transition:border-color .15s
+}
+.tag-form input[type=text]:focus{border-color:#555}
+.tag-form .form-note{font-size:11px;color:#bbb;margin-top:10px;line-height:1.5}
+.form-actions{display:flex;gap:10px;margin-top:16px}
+.btn-primary{
+  flex:1;background:#222;color:#fff;border:none;font-weight:800;
+  padding:11px;border-radius:10px;cursor:pointer;font-size:14px;font-family:inherit
+}
+.btn-secondary{
+  background:transparent;color:#444;border:1.5px solid #e0e0e0;
+  padding:11px 16px;border-radius:10px;cursor:pointer;font-size:14px;font-family:inherit
+}
+
+/* TAGS PANEL */
+.tags-panel{
+  position:fixed;top:60px;left:12px;z-index:500;
+  width:min(300px,calc(100vw - 24px));max-height:calc(100vh - 160px);
+  background:#fff;border-radius:14px;box-shadow:0 8px 28px rgba(0,0,0,.25);
+  display:none;flex-direction:column;overflow:hidden
+}
+.tags-panel.show{display:flex}
+.panel-head{padding:14px 16px 10px;border-bottom:1px solid #eee;display:flex;justify-content:space-between;align-items:center}
+.panel-head h3{font-size:15px;font-weight:900}
+.panel-close{background:#eee;border:none;border-radius:50%;width:24px;height:24px;cursor:pointer;font-size:12px}
+.panel-body{overflow-y:auto;flex:1;padding:6px 8px}
+.tag-list-item{display:flex;gap:10px;padding:10px 8px;border-radius:10px;border-bottom:1px solid #f5f5f5}
+.tag-list-item:hover{background:#fafafa}
+.tag-list-dot{width:9px;height:9px;border-radius:50%;background:#555;flex-shrink:0;margin-top:5px}
+.tag-list-body{flex:1}
+.tag-list-text{font-size:13px;font-weight:700;line-height:1.35}
+.tag-list-sub{display:flex;gap:10px;align-items:center;font-size:11px;color:#aaa;margin-top:4px}
+.tag-vote-btns{display:flex;align-items:center;gap:5px}
+.tag-vote-btns button{
+  width:22px;height:22px;border-radius:50%;border:none;background:#f0f0f0;cursor:pointer;
+  font-size:13px;display:flex;align-items:center;justify-content:center;padding:0;
+  transition:background .1s
+}
+.tag-vote-btns button:hover{background:#e0e0e0}
+.tag-vote-btns .vote-n{font-size:12px;font-weight:800;color:#444}
+.del-btn{background:none;border:none;color:#e55;font-size:11px;font-weight:700;cursor:pointer}
+.panel-empty{padding:28px 16px;text-align:center;color:#bbb;font-size:13px}
+.panel-foot{padding:10px 14px;border-top:1px solid #eee}
+.reset-btn{background:none;border:none;color:#999;font-size:11px;cursor:pointer;text-decoration:underline}
+
+/* PLACES PANEL */
+.places-panel{
+  position:fixed;top:60px;left:12px;z-index:500;
+  width:min(320px,calc(100vw - 24px));max-height:calc(100vh - 160px);
+  background:#fff;border-radius:14px;box-shadow:0 8px 28px rgba(0,0,0,.25);
+  display:none;flex-direction:column;overflow:hidden
+}
+.places-panel.show{display:flex}
+.places-body{overflow-y:auto;flex:1;padding:8px 0;display:flex;flex-direction:column}
+.places-panel label.place-item{
+  display:flex;align-items:center;gap:12px;padding:12px 18px;
+  cursor:pointer;user-select:none;font-family:'Nunito',sans-serif;
+  margin:0;color:#000;
+}
+.places-panel label.place-item:hover{background:#f5f5f5}
+.places-panel input[type=checkbox]{
+  width:18px;height:18px;cursor:pointer;margin:0;
+}
+.place-group{font-size:22px!important;font-weight:900!important;padding-top:16px!important;padding-bottom:12px!important}
+.place-sub{font-size:18px!important;font-weight:800!important;padding-left:48px!important}
+
+/* TOAST */
+.toast{
+  position:fixed;bottom:82px;left:50%;transform:translateX(-50%);
+  z-index:900;background:#222;color:#fff;font-size:13px;font-weight:700;
+  padding:10px 20px;border-radius:999px;box-shadow:0 6px 20px rgba(0,0,0,.4);
+  display:none;white-space:nowrap;max-width:90vw;text-align:center
+}
+.toast.show{display:block}
+
+/* POPUP */
+.leaflet-popup-content-wrapper{border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.2)}
+.leaflet-popup-content{margin:12px 16px;min-width:170px}
+.popup-cat{
+  display:inline-block;font-size:11px;font-weight:900;letter-spacing:.04em;
+  text-transform:uppercase;color:#fff;background:var(--cc,#555);
+  padding:3px 10px;border-radius:999px;margin-bottom:7px
+}
+.popup-title{font-size:16px;font-weight:900;font-family:'Nunito',sans-serif;margin:0 0 3px}
+.popup-fa{font-size:12px;color:#aaa;margin-bottom:5px}
+.popup-blurb{font-size:13px;line-height:1.45;color:#333;margin:0}
+
+/* DISTRICT LABEL */
+.district-label-wrap{background:transparent!important;border:none!important}
+.district-label{
+  display:inline-flex;align-items:center;gap:4px;
+  font-size:11px;font-weight:900;color:#fff;
+  background:var(--cc,#555);padding:3px 9px;border-radius:6px;
+  white-space:nowrap;box-shadow:0 2px 6px rgba(0,0,0,.3);cursor:pointer;
+  font-family:'Nunito',sans-serif
+}
+
+.credit{position:fixed;bottom:66px;right:12px;z-index:500;font-size:10px;color:rgba(0,0,0,.35);pointer-events:none}
+
+@media(max-width:600px){
+  .top-right{top:auto;bottom:68px;right:8px;flex-direction:column}
+  .zoom-btns{display:none}
+  .cat-btn{min-width:64px;font-size:11px}
+}
+</style>
 </head>
 <body>
+<div id="map"></div>
 
-    <!-- SIDEBAR (Your Photo, Name, and Links) -->
-    <div class="sidebar">
-        <!-- Replace the link below with your actual photo link later -->
-        <img src="https://via.placeholder.com/160" alt="Profile Picture">
-        <h1>Your Full Name</h1>
-        <p>Ph.D. Candidate / Researcher<br>at University of Example</p>
-        
-        <a href="mailto:your.email@example.com">📧 Email Me</a>
-        <a href="https://scholar.google.com/" target="_blank">🎓 Google Scholar</a>
-        <a href="https://linkedin.com/" target="_blank">💼 LinkedIn</a>
-        <a href="https://github.com/" target="_blank">💻 GitHub</a>
-    </div>
+<!-- Paint canvas -->
+<canvas id="paintCanvas"></canvas>
 
-    <!-- MAIN CONTENT (Your Resume details) -->
-    <div class="content">
-        
-        <h2>About Me</h2>
-        <p>Hello! I am a researcher specializing in [Your Field, e.g., Machine Learning and Data Science]. My research focuses on [briefly explain your research interest in 2-3 sentences]. I am passionate about solving real-world problems through scientific methods.</p>
-        
-        <h2>Education</h2>
-        <div class="item">
-            <h3>Ph.D. in [Your Major]</h3>
-            <p>University of Example, City, Country</p>
-            <p class="date">2020 - Present</p>
-        </div>
-        <div class="item">
-            <h3>M.Sc. in [Your Major]</h3>
-            <p>University of Example, City, Country</p>
-            <p class="date">2017 - 2019</p>
-        </div>
+<!-- Brush cursor -->
+<div class="brush-cursor" id="brushCursor"></div>
 
-        <h2>Selected Publications</h2>
-        <div class="item">
-            <h3>Title of Your Best Paper goes here</h3>
-            <p><strong>Your Name</strong>, Co-author Name, Professor Name. <em>Name of the Journal/Conference</em>.</p>
-            <p class="pub-links"><a href="#" target="_blank">[PDF]</a> <a href="#" target="_blank">[Code]</a></p>
-        </div>
-        <div class="item">
-            <h3>Title of Your Second Paper goes here</h3>
-            <p>Co-author Name, <strong>Your Name</strong>. <em>Name of the Journal/Conference</em>.</p>
-            <p class="pub-links"><a href="#" target="_blank">[PDF]</a> <a href="#" target="_blank">[Publisher Link]</a></p>
-        </div>
+<!-- Search -->
+<div class="search-bar">
+  <span class="search-icon">🔍</span>
+  <input id="searchInput" type="text" placeholder="Search neighborhoods or tags…" autocomplete="off"/>
+  <span class="search-clear" id="searchClear">✕</span>
+  <div class="search-results" id="searchResults"></div>
+</div>
 
-        <h2>Skills & Tools</h2>
-        <p><strong>Programming:</strong> Python, R, MATLAB, C++</p>
-        <p><strong>Languages:</strong> Persian (Native), English (Fluent)</p>
+<!-- Top Left -->
+<div class="top-left">
+  <select class="map-btn" id="citySelect">
+    <option value="sari">📍 Sari</option>
+    <option value="tehran">📍 Tehran</option>
+  </select>
+  <button class="map-btn" id="pixelBtn">🎨 Pixel mode</button>
+  <button class="map-btn" id="placesBtn">📍 Places</button>
+  <button class="map-btn" id="tagsBtn">🏷️ Tags <span id="tagCountBadge" style="display:none;background:#e55;color:#fff;border-radius:999px;padding:1px 6px;font-size:11px;margin-left:2px"></span></button>
+</div>
 
-    </div>
+<!-- Top Right -->
+<div class="top-right">
+  <button class="icon-btn" id="paintBtn" title="Paint mode">🖌️</button>
+  <button class="icon-btn" id="tagDropBtn" title="Drop a tag">🏷️</button>
+</div>
 
+<!-- Zoom -->
+<div class="zoom-btns">
+  <button class="zoom-btn" id="zoomIn">+</button>
+  <button class="zoom-btn" id="zoomOut">−</button>
+</div>
+
+<!-- Mode hint -->
+<div class="mode-hint" id="modeHint">
+  <span id="modeHintText"></span>
+  <button class="done-btn" id="modeDoneBtn">Done</button>
+</div>
+
+<!-- Bottom color bar -->
+<div class="color-picker-bar" id="colorBar"></div>
+
+<!-- Tags panel -->
+<div class="tags-panel" id="tagsPanel">
+  <div class="panel-head">
+    <h3>💬 Tags on the map</h3>
+    <button class="panel-close" id="tagsPanelClose">✕</button>
+  </div>
+  <div class="panel-body" id="tagsList"></div>
+  <div class="panel-foot">
+    <button class="reset-btn" id="resetBtn">Reset everything I've added</button>
+  </div>
+</div>
+
+<!-- Places panel -->
+<div class="places-panel" id="placesPanel">
+  <div class="panel-head">
+    <h3>📍 Places</h3>
+    <button class="panel-close" id="placesPanelClose">✕</button>
+  </div>
+  <div class="places-body">
+    <label class="place-item place-group"><input type="checkbox" id="chkGood"> Good</label>
+    <label class="place-item place-sub"><input type="checkbox" class="chk-good"> ☕ Cafes to work</label>
+    <label class="place-item place-sub"><input type="checkbox" class="chk-good"> 👩‍💻 Coworking</label>
+    <label class="place-item place-sub"><input type="checkbox" class="chk-good"> 🧘 Yoga studios</label>
+    <label class="place-item place-sub"><input type="checkbox" class="chk-good"> 🤸 Pilates</label>
+    <label class="place-item place-sub"><input type="checkbox" class="chk-good"> 👜 Luxury brands</label>
+    <label class="place-item place-sub"><input type="checkbox" class="chk-good"> 🌳 Parks</label>
+    <label class="place-item place-sub"><input type="checkbox" class="chk-good"> 🛝 Playgrounds</label>
+
+    <label class="place-item place-group" style="border-top:1px solid #eee;margin-top:4px"><input type="checkbox" id="chkBad"> Bad</label>
+    <label class="place-item place-sub"><input type="checkbox" class="chk-bad"> 🏨 Hotels</label>
+    <label class="place-item place-sub"><input type="checkbox" class="chk-bad"> 🍔 Fast food</label>
+    <label class="place-item place-sub"><input type="checkbox" class="chk-bad"> 🎰 Gambling</label>
+    <label class="place-item place-sub"><input type="checkbox" class="chk-bad"> 💸 Payday loans</label>
+    <label class="place-item place-sub"><input type="checkbox" class="chk-bad"> 🏪 Pawn shops</label>
+    <label class="place-item place-sub"><input type="checkbox" class="chk-bad"> 🧺 Laundromats</label>
+    <label class="place-item place-sub"><input type="checkbox" class="chk-bad"> 📱 Phone repair</label>
+    <label class="place-item place-sub"><input type="checkbox" class="chk-bad"> 💱 Money transfer</label>
+    <label class="place-item place-sub"><input type="checkbox" class="chk-bad"> 🚧 Construction zones</label>
+    <label class="place-item place-sub"><input type="checkbox" class="chk-bad"> 🏭 Industrial areas</label>
+    <label class="place-item place-sub"><input type="checkbox" class="chk-bad"> 💃 Strip clubs</label>
+  </div>
+</div>
+
+<!-- Tag form -->
+<div class="overlay" id="overlay"></div>
+<div class="tag-form" id="tagForm">
+  <h2>Drop a tag</h2>
+  <p class="sub">Tag this spot with a short comment.</p>
+  <label for="tagText">What's the vibe here?</label>
+  <input type="text" id="tagText" maxlength="42" placeholder="e.g. Best kebab in town"/>
+  <p class="form-note">Shared with everyone viewing this map.</p>
+  <div class="form-actions">
+    <button class="btn-primary" id="tagSave">Drop it</button>
+    <button class="btn-secondary" id="tagCancel">Cancel</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<div class="credit">© OpenStreetMap · fan-made map</div>
+
+<script>
+(function(){
+"use strict";
+
+/* ═══════════════════════════════
+   CITIES SETUP
+═══════════════════════════════ */
+var CITIES = {
+  sari: {
+    center: [36.5633, 53.0601],
+    bounds: [[36.40, 52.90], [36.70, 53.20]],
+    name: "Sari",
+    defaultZoom: 14,
+    minZoom: 13
+  },
+  tehran: {
+    center: [35.73, 51.42],
+    bounds: [[35.50, 51.10], [35.90, 51.70]],
+    name: "Tehran",
+    defaultZoom: 12,
+    minZoom: 11
+  }
+};
+var CITY_KEYS = Object.keys(CITIES);
+
+/* ═══════════════════════════════
+   CATEGORIES
+═══════════════════════════════ */
+var CATS = {
+  suits:    { label:"Suits",    emoji:"👔", color:"#3E6BFF", rgba:"rgba(62,107,255,0.45)" },
+  rich:     { label:"Rich",     emoji:"🤑", color:"#1FAE63", rgba:"rgba(31,174,99,0.45)"  },
+  cool:     { label:"Cool",     emoji:"😎", color:"#F0B429", rgba:"rgba(240,180,41,0.45)" },
+  tourists: { label:"Tourists", emoji:"📸", color:"#E2452D", rgba:"rgba(226,69,45,0.45)"  },
+  uni:      { label:"Uni",      emoji:"🎓", color:"#2C2E78", rgba:"rgba(44,46,120,0.45)"  },
+  normies:  { label:"Normies",  emoji:"🏠", color:"#9AA3AF", rgba:"rgba(154,163,175,0.45)"},
+  crime:    { label:"Crime",    emoji:"🚨", color:"#3D3F46", rgba:"rgba(61,63,70,0.45)"   }
+};
+var CAT_KEYS = Object.keys(CATS);
+
+/* ═══════════════════════════════
+   ZONES (Now Emptied!)
+═══════════════════════════════ */
+var ZONES = [];
+
+/* ═══════════════════════════════
+   CLOUD / LOCAL STORAGE LAYER
+   Shared data = visible to every browser (this is the "multi-user" layer).
+   Personal data = scoped to this browser only (this browser IS the "user",
+   no sign-up needed — that scoping is handled for us).
+   Falls back to plain localStorage (solo mode, this browser only) if
+   window.storage isn't available, e.g. if this file is hosted outside
+   of a Claude artifact — multi-user sync specifically needs that API.
+═══════════════════════════════ */
+var hasCloud = !!(window.storage && typeof window.storage.get === "function");
+
+function lsGet(k,fb){try{var v=localStorage.getItem(k);return v?JSON.parse(v):fb;}catch(e){return fb;}}
+function lsSet(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}
+
+async function cloudGet(key, shared){
+  if(!hasCloud) return lsGet("thm_"+key, null);
+  try{
+    var r = await window.storage.get(key, !!shared);
+    return r ? JSON.parse(r.value) : null;
+  }catch(e){ return null; }
+}
+async function cloudSet(key, value, shared){
+  if(!hasCloud){ lsSet("thm_"+key, value); return true; }
+  try{ return await window.storage.set(key, JSON.stringify(value), !!shared); }
+  catch(e){ return null; }
+}
+
+/* ═══════════════════════════════
+   STATE
+   paintData[city][cellKey]     = { lat, lng, votes:{catKey:n}, ts }
+   personalPaint[city][cellKey] = catKey this browser voted for
+   tagsData[city][tagId]        = { id, text, lat, lng, votes, ts, city }
+   personalTags[city]           = { votes:{tagId:1|-1}, mine:[tagId,...] }
+═══════════════════════════════ */
+var paintData = {}, personalPaint = {}, tagsData = {}, personalTags = {};
+var dataLoaded = false;
+var dirtyPaintCities = {};
+
+CITY_KEYS.forEach(function(c){
+  paintData[c]={}; personalPaint[c]={};
+  tagsData[c]={}; personalTags[c]={votes:{},mine:[]};
+});
+
+/* ═══════════════════════════════
+   HELPERS
+═══════════════════════════════ */
+function esc(s){return String(s||"").replace(/[&<>"']/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];});}
+function timeAgo(ts){var s=Math.max(1,Math.round((Date.now()-ts)/1000));if(s<60)return"just now";var m=Math.round(s/60);if(m<60)return m+"m ago";var h=Math.round(m/60);if(h<24)return h+"h ago";var d=Math.round(h/24);if(d<30)return d+"d ago";return Math.round(d/30)+"mo ago";}
+function showToast(msg){var t=document.getElementById("toast");t.textContent=msg;t.classList.add("show");clearTimeout(t._t);t._t=setTimeout(function(){t.classList.remove("show");},2600);}
+
+function getCityForLatLng(lat, lng) {
+  for (var key in CITIES) {
+    var b = CITIES[key].bounds;
+    if (lat >= b[0][0] && lat <= b[1][0] && lng >= b[0][1] && lng <= b[1][1]) {
+      return key;
+    }
+  }
+  return "sari";
+}
+
+/* Consensus rule: majority vote wins a cell/tag. Ties break toward
+   whichever category comes first in CAT_KEYS, so the result is always
+   deterministic (matches the "10 red > 9 yellow > 7 blue ⇒ red" example). */
+function winningCat(votes){
+  var best=null, bestN=0;
+  for(var i=0;i<CAT_KEYS.length;i++){
+    var k=CAT_KEYS[i], n=votes[k]||0;
+    if(n>bestN){bestN=n;best=k;}
+  }
+  return best;
+}
+
+/* ═══════════════════════════════
+   MAP
+═══════════════════════════════ */
+var initialCity = CITIES.sari;
+var map = L.map("map", {
+  minZoom: initialCity.minZoom,
+  maxZoom: 18,
+  zoomControl: false,
+  attributionControl: false,
+  maxBounds: initialCity.bounds,
+  maxBoundsViscosity: 1.0
+});
+L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",{subdomains:"abcd",maxZoom:19}).addTo(map);
+map.setView(initialCity.center, initialCity.defaultZoom);
+
+document.getElementById("citySelect").addEventListener("change", function(e) {
+  var city = CITIES[e.target.value];
+  map.setMaxBounds(null);
+  map.setMinZoom(city.minZoom);
+  map.setView(city.center, city.defaultZoom, { animate: false });
+  map.setMaxBounds(city.bounds);
+  redrawCanvas();
+  refreshShared();
+});
+
+document.getElementById("zoomIn").onclick=function(){map.zoomIn();};
+document.getElementById("zoomOut").onclick=function(){map.zoomOut();};
+
+map.on("click", function() {
+  document.querySelectorAll('.tag-pin.expanded').forEach(function(p){
+    p.classList.remove('expanded');
+  });
+});
+
+/* ═══════════════════════════════
+   PAINT CANVAS SYSTEM
+═══════════════════════════════ */
+var canvas = document.getElementById("paintCanvas");
+var ctx = canvas.getContext("2d");
+var brushCursor = document.getElementById("brushCursor");
+var BRUSH_RADIUS = 8; // half-size of the square in px
+var MIN_INTERACT_ZOOM = 17; // 100-meter scale equivalent zoom level
+var GRID_DEG = 0.0001; // ~9-11m per cell — strokes snap to this shared grid so votes stack
+
+function snapCell(lat, lng){
+  var glat = Math.round(lat / GRID_DEG) * GRID_DEG;
+  var glng = Math.round(lng / GRID_DEG) * GRID_DEG;
+  glat = Math.round(glat*1e6)/1e6;
+  glng = Math.round(glng*1e6)/1e6;
+  return { lat: glat, lng: glng, key: glat.toFixed(6)+","+glng.toFixed(6) };
+}
+
+function renderPoint(x, y, color) {
+  var rgba = CATS[color] ? CATS[color].rgba : "rgba(100,100,100,0.45)";
+  ctx.fillStyle = rgba;
+  ctx.fillRect(x - BRUSH_RADIUS, y - BRUSH_RADIUS, BRUSH_RADIUS * 2, BRUSH_RADIUS * 2);
+}
+
+function drawCellIfVisible(rec){
+  var pt = map.latLngToContainerPoint([rec.lat, rec.lng]);
+  if (pt.x >= -BRUSH_RADIUS && pt.x <= canvas.width + BRUSH_RADIUS &&
+      pt.y >= -BRUSH_RADIUS && pt.y <= canvas.height + BRUSH_RADIUS) {
+    var win = winningCat(rec.votes);
+    if(win) renderPoint(pt.x, pt.y, win);
+  }
+}
+
+function redrawCanvas() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  if(pixelDisplayMode===2) return;
+  var now=Date.now(), TEN_DAYS=10*24*60*60*1000;
+  CITY_KEYS.forEach(function(c){
+    var cells = paintData[c]; if(!cells) return;
+    Object.keys(cells).forEach(function(k){
+      var rec = cells[k];
+      if(pixelDisplayMode===1 && (now-rec.ts)>TEN_DAYS) return;
+      drawCellIfVisible(rec);
+    });
+  });
+}
+
+function resizeCanvas(){
+  canvas.width  = window.innerWidth;
+  canvas.height = window.innerHeight;
+  redrawCanvas();
+}
+window.addEventListener("resize", resizeCanvas);
+resizeCanvas();
+
+/* Apply this browser's vote to a grid cell (one vote per browser per cell;
+   repainting a cell a different color moves the vote, it doesn't stack). */
+function applyPaintVote(lat, lng, catKey){
+  var cell = snapCell(lat, lng);
+  var cityKey = getCityForLatLng(cell.lat, cell.lng);
+  var mine = personalPaint[cityKey][cell.key];
+  if(mine === catKey) return null;
+
+  var rec = paintData[cityKey][cell.key];
+  if(!rec){ rec = { lat:cell.lat, lng:cell.lng, votes:{}, ts:Date.now() }; paintData[cityKey][cell.key]=rec; }
+
+  if(mine){
+    rec.votes[mine] = (rec.votes[mine]||0) - 1;
+    if(rec.votes[mine] <= 0) delete rec.votes[mine];
+  }
+  rec.votes[catKey] = (rec.votes[catKey]||0) + 1;
+  rec.ts = Date.now();
+  personalPaint[cityKey][cell.key] = catKey;
+  dirtyPaintCities[cityKey] = true;
+  return rec;
+}
+
+var lastPaintCellKey=null, lastPaintColor=null;
+function paintAt(x, y, color){
+  var latlng = map.containerPointToLatLng(L.point(x, y));
+  var cell = snapCell(latlng.lat, latlng.lng);
+  if(lastPaintCellKey===cell.key && lastPaintColor===color) return;
+  lastPaintCellKey=cell.key; lastPaintColor=color;
+
+  var rec = applyPaintVote(latlng.lat, latlng.lng, color);
+  if(rec && pixelDisplayMode!==2) drawCellIfVisible(rec);
+}
+
+async function flushPaint(){
+  var cities = Object.keys(dirtyPaintCities);
+  if(!cities.length) return;
+  dirtyPaintCities = {};
+  for(var i=0;i<cities.length;i++){
+    var c=cities[i];
+    await cloudSet('shared_paint:'+c, paintData[c], true);
+    await cloudSet('personal_paint:'+c, personalPaint[c], false);
+  }
+}
+
+// Ensure paintings stick properly and retain pixel-sizes mapped geographically
+map.on("move zoom viewreset", redrawCanvas);
+
+// Prevent users from bypassing the rule by zooming out AFTER entering paint/tag mode
+map.on("zoomend", function() {
+  if ((paintMode || tagMode) && map.getZoom() < MIN_INTERACT_ZOOM) {
+    exitAllModes();
+    showToast("Zoomed out too far! Zoom in closer to interact.");
+  }
+});
+
+/* ═══════════════════════════════
+   ZONE LABELS (Rendered if any exist)
+═══════════════════════════════ */
+function buildPopup(zone){
+  var meta=CATS[zone.cat];
+  return '<div class="popup-cat" style="--cc:'+meta.color+'">'+meta.emoji+' '+esc(meta.label)+'</div>'
+    +'<h3 class="popup-title">'+esc(zone.name)+'</h3>'
+    +(zone.nameFa?'<div class="popup-fa" dir="rtl">'+esc(zone.nameFa)+'</div>':'')
+    +'<p class="popup-blurb">'+esc(zone.blurb||'')+'</p>';
+}
+
+ZONES.forEach(function(zone){
+  var meta = CATS[zone.cat];
+  var hit = L.circle([zone.lat,zone.lng],{
+    radius:Math.max(zone.radius*1.3,500),opacity:0,fillOpacity:0,interactive:true
+  }).addTo(map);
+  L.circle([zone.lat,zone.lng],{
+    radius:zone.radius,color:meta.color,weight:2,
+    fillColor:meta.color,fillOpacity:0.22,interactive:false
+  }).addTo(map);
+  L.marker([zone.lat,zone.lng],{
+    icon:L.divIcon({
+      className:"district-label-wrap",
+      html:'<span class="district-label" style="--cc:'+meta.color+'">'+meta.emoji+' '+esc(zone.name)+'</span>',
+      iconSize:[160,24],iconAnchor:[80,12]
+    }),
+    interactive:false
+  }).addTo(map);
+
+  hit.on("click",function(e){
+    if(paintMode){
+      var pt = map.latLngToContainerPoint(e.latlng);
+      paintAt(pt.x, pt.y, selectedPaintCat);
+      flushPaint();
+      showToast(zone.name+" painted "+CATS[selectedPaintCat].emoji+" "+CATS[selectedPaintCat].label);
+      return;
+    }
+    if(tagMode){openTagForm(e.latlng);return;}
+    L.popup().setLatLng(e.latlng).setContent(buildPopup(zone)).openOn(map);
+  });
+  hit.on("mouseover",function(){
+    document.getElementById("searchInput").placeholder=zone.name;
+  });
+  hit.on("mouseout",function(){
+    document.getElementById("searchInput").placeholder="Search neighborhoods or tags…";
+  });
+});
+
+/* ═══════════════════════════════
+   BOTTOM COLOR BAR
+═══════════════════════════════ */
+var catBar = document.getElementById("colorBar");
+var activeFilters = new Set(CAT_KEYS);
+
+CAT_KEYS.forEach(function(key){
+  var meta=CATS[key];
+  var btn=document.createElement("button");
+  btn.type="button";
+  btn.className="cat-btn on";
+  btn.style.setProperty("--cc",meta.color);
+  btn.innerHTML='<span class="cat-emoji">'+meta.emoji+'</span><span>'+meta.label+'</span>';
+  btn.dataset.key=key;
+  catBar.appendChild(btn);
+});
+
+/* ═══════════════════════════════
+   PAINT MODE
+═══════════════════════════════ */
+var paintMode=false, tagMode=false, selectedPaintCat=null;
+var isPainting=false;
+
+function exitAllModes(){
+  paintMode=false; tagMode=false; selectedPaintCat=null; isPainting=false;
+  document.getElementById("paintBtn").classList.remove("active");
+  document.getElementById("tagDropBtn").classList.remove("active");
+  document.getElementById("modeHint").classList.remove("show");
+  catBar.classList.remove("paint-active");
+  canvas.classList.remove("active");
+  brushCursor.style.display="none";
+  Array.from(catBar.children).forEach(function(b){
+    b.classList.remove("paint-selected");
+    b.classList.toggle("on",activeFilters.has(b.dataset.key));
+  });
+}
+
+function setHint(txt){
+  document.getElementById("modeHintText").textContent=txt;
+  document.getElementById("modeHint").classList.add("show");
+}
+
+document.getElementById("modeDoneBtn").onclick=exitAllModes;
+
+document.getElementById("paintBtn").onclick=function(){
+  if(!dataLoaded){ showToast("Still loading the map's data…"); return; }
+  if(paintMode){exitAllModes();return;}
+
+  if(map.getZoom() < MIN_INTERACT_ZOOM){
+    showToast("Zoom in closer (100m scale) to paint!");
+    return;
+  }
+
+  exitAllModes();
+  paintMode=true;
+  document.getElementById("paintBtn").classList.add("active");
+  catBar.classList.add("paint-active");
+  Array.from(catBar.children).forEach(function(b){b.classList.add("on");});
+  setHint("Pick a color below, then draw on the map.");
+};
+
+document.getElementById("tagDropBtn").onclick=function(){
+  if(!dataLoaded){ showToast("Still loading the map's data…"); return; }
+  if(tagMode){exitAllModes();return;}
+
+  if(map.getZoom() < MIN_INTERACT_ZOOM){
+    showToast("Zoom in closer (100m scale) to drop a tag!");
+    return;
+  }
+
+  exitAllModes();
+  tagMode=true;
+  document.getElementById("tagDropBtn").classList.add("active");
+  canvas.classList.add("active");
+  setHint("Tap anywhere on the map to drop a tag.");
+};
+
+/* Cat bar clicks */
+catBar.addEventListener("click",function(e){
+  var btn=e.target.closest(".cat-btn");
+  if(!btn) return;
+  var key=btn.dataset.key;
+
+  if(paintMode){
+    selectedPaintCat=key;
+    Array.from(catBar.children).forEach(function(b){b.classList.remove("paint-selected");});
+    btn.classList.add("paint-selected");
+    canvas.classList.add("active");
+    /* Square brush cursor */
+    brushCursor.style.width  = (BRUSH_RADIUS*2)+"px";
+    brushCursor.style.height = (BRUSH_RADIUS*2)+"px";
+    brushCursor.style.background = CATS[key].rgba;
+    brushCursor.style.display = "block";
+    setHint("Draw on the map — click or drag to paint "+CATS[key].emoji+" "+CATS[key].label);
+    return;
+  }
+
+  if(activeFilters.has(key)) activeFilters.delete(key); else activeFilters.add(key);
+  btn.classList.toggle("on",activeFilters.has(key));
+});
+
+/* Canvas mouse events */
+function getPos(e){
+  if(e.touches) return {x:e.touches[0].clientX, y:e.touches[0].clientY};
+  return {x:e.clientX, y:e.clientY};
+}
+
+canvas.addEventListener("mousedown",function(e){
+  if(!paintMode || !selectedPaintCat) return;
+  isPainting=true;
+  var p=getPos(e);
+  paintAt(p.x,p.y,selectedPaintCat);
+});
+canvas.addEventListener("mousemove",function(e){
+  var p=getPos(e);
+  brushCursor.style.left=p.x+"px";
+  brushCursor.style.top=p.y+"px";
+  if(!isPainting||!paintMode||!selectedPaintCat) return;
+  paintAt(p.x,p.y,selectedPaintCat);
+});
+canvas.addEventListener("mouseup",function(){
+  if(isPainting) flushPaint();
+  isPainting=false;
+});
+canvas.addEventListener("mouseleave",function(){
+  if(isPainting) flushPaint();
+  isPainting=false;
+  brushCursor.style.display="none";
+});
+canvas.addEventListener("mouseenter",function(){
+  if(paintMode&&selectedPaintCat) brushCursor.style.display="block";
+});
+
+canvas.addEventListener("touchstart",function(e){
+  e.preventDefault();
+  if(!paintMode||!selectedPaintCat) return;
+  isPainting=true;
+  var p=getPos(e);
+  paintAt(p.x,p.y,selectedPaintCat);
+},{passive:false});
+canvas.addEventListener("touchmove",function(e){
+  e.preventDefault();
+  if(!isPainting||!paintMode||!selectedPaintCat) return;
+  var p=getPos(e);
+  paintAt(p.x,p.y,selectedPaintCat);
+},{passive:false});
+canvas.addEventListener("touchend",function(){
+  if(isPainting) flushPaint();
+  isPainting=false;
+});
+
+/* Tag mode click on canvas */
+canvas.addEventListener("click",function(e){
+  if(tagMode){
+    var latlng=map.containerPointToLatLng(L.point(e.clientX,e.clientY));
+    openTagForm(latlng);
+  }
+});
+
+document.addEventListener("keydown",function(e){
+  if(e.key==="Escape"){exitAllModes();closeTagForm();closePanels();}
+});
+
+/* ═══════════════════════════════
+   PIXEL BUTTON CYCLER — All / New (10d) / Blank
+═══════════════════════════════ */
+var pixelDisplayMode = 0; // 0: all, 1: new only, 2: blank
+var pixelBtnLabels = ["🎨 Pixel mode", "🆕 New pixels", "⬜ Blank mode"];
+
+document.getElementById("pixelBtn").onclick = function() {
+  pixelDisplayMode = (pixelDisplayMode + 1) % 3;
+  this.innerHTML = pixelBtnLabels[pixelDisplayMode];
+  canvas.style.visibility = pixelDisplayMode === 2 ? "hidden" : "visible";
+  redrawCanvas();
+};
+
+/* ═══════════════════════════════
+   TAG BUTTON CYCLER STATE
+═══════════════════════════════ */
+var tagDisplayMode = 0; // 0: All Tags, 1: New Tags, 2: No Tags
+var tagBtnLabels = ["🏷️ Tags", "🏷️ New Tags", "🏷️ No Tags"];
+
+document.getElementById("tagsBtn").onclick = function() {
+  tagDisplayMode = (tagDisplayMode + 1) % 3;
+  applyTagDisplayMode();
+};
+
+function allTagsFlat(){
+  var out=[];
+  CITY_KEYS.forEach(function(c){
+    var dict=tagsData[c]||{};
+    Object.keys(dict).forEach(function(id){out.push(dict[id]);});
+  });
+  return out;
+}
+function findTag(id){
+  for(var i=0;i<CITY_KEYS.length;i++){
+    var c=CITY_KEYS[i];
+    if(tagsData[c] && tagsData[c][id]) return {tag:tagsData[c][id], city:c};
+  }
+  return null;
+}
+
+function applyTagDisplayMode() {
+  var now = Date.now();
+  var TEN_DAYS = 10 * 24 * 60 * 60 * 1000;
+  var visibleCount = 0;
+
+  allTagsFlat().forEach(function(t) {
+    var m = tagMarkers[t.id];
+    if (!m) return;
+
+    var show = false;
+    if (tagDisplayMode === 0) show = true;
+    else if (tagDisplayMode === 1) show = (now - t.ts) <= TEN_DAYS;
+
+    if (show) {
+      if (!map.hasLayer(m)) map.addLayer(m);
+      visibleCount++;
+    } else {
+      if (map.hasLayer(m)) map.removeLayer(m);
+    }
+  });
+
+  var btn = document.getElementById("tagsBtn");
+  var displayStyle = visibleCount ? "inline" : "none";
+  btn.innerHTML = tagBtnLabels[tagDisplayMode] + ' <span id="tagCountBadge" style="display:'+displayStyle+';background:#e55;color:#fff;border-radius:999px;padding:1px 6px;font-size:11px;margin-left:2px">' + visibleCount + '</span>';
+}
+
+function updateTagBadge(){
+  applyTagDisplayMode();
+}
+
+/* ═══════════════════════════════
+   TAGS
+═══════════════════════════════ */
+var tagMarkers={};
+var pendingLatLng=null;
+
+function sizeForVotes(v){return Math.max(16,Math.min(38,18+v*1.8));}
+function rotForId(id){var h=0;for(var i=0;i<id.length;i++)h=(h*31+id.charCodeAt(i))%14;return h-7;}
+
+/* 👍 / 👎 like-dislike buttons on map pin */
+function renderTagIcon(tag){
+  var pd = personalTags[tag.city] || {mine:[]};
+  var mine = pd.mine.indexOf(tag.id) !== -1;
+  return '<div class="tag-pin">'
+    +'<span class="tag-votes">'
+    +'<button data-act="up" data-id="'+tag.id+'" title="Like">👍</button>'
+    +'<span class="vote-count">'+tag.votes+'</span>'
+    +'<button data-act="down" data-id="'+tag.id+'" title="Dislike">👎</button>'
+    +'</span>'
+    +'<span class="tag-label" style="font-size:'+sizeForVotes(tag.votes)+'px;transform:rotate('+rotForId(tag.id)+'deg);display:inline-block">'+esc(tag.text)+'</span>'
+    +'<span class="tag-time">'+timeAgo(tag.ts)+'</span>'
+    +(mine?'<button class="tag-del" data-act="del" data-id="'+tag.id+'">Remove</button>':'')
+    +'</div>';
+}
+
+function placeTagMarker(tag){
+  var m=L.marker([tag.lat,tag.lng],{
+    icon:L.divIcon({className:"tag-wrap",html:renderTagIcon(tag),iconSize:[1,1],iconAnchor:[0,10]})
+  }).addTo(map);
+
+  // Tag map click logic (expands like/dislike buttons for touch)
+  m.on("click", function(e) {
+    var el = m.getElement();
+    if(el) {
+      var pin = el.querySelector('.tag-pin');
+      if(pin) {
+        var isExp = pin.classList.contains('expanded');
+        document.querySelectorAll('.tag-pin.expanded').forEach(function(p){ p.classList.remove('expanded'); });
+        if(!isExp) pin.classList.add('expanded');
+      }
+    }
+  });
+
+  m.on("add",function(){wireTagBtns(m);});
+  wireTagBtns(m);
+  tagMarkers[tag.id]=m;
+}
+
+function refreshTagMarker(tag){
+  var m=tagMarkers[tag.id];if(!m)return;
+  m.setIcon(L.divIcon({className:"tag-wrap",html:renderTagIcon(tag),iconSize:[1,1],iconAnchor:[0,10]}));
+  // re-wire after icon swap
+  setTimeout(function(){wireTagBtns(m);},0);
+}
+
+function wireTagBtns(m){
+  var el=m.getElement();if(!el)return;
+  el.querySelectorAll("button[data-act]").forEach(function(btn){
+    btn.onclick=function(e){
+      e.stopPropagation(); // Prevents click passing to marker wrapper!
+      handleTagAction(btn.dataset.id, btn.dataset.act);
+    };
+  });
+}
+
+/* One vote per browser per tag; clicking the same direction again undoes it
+   (Reddit-style toggle) — this is what keeps the vote count an honest
+   count of distinct people, not a single person clicking repeatedly. */
+function applyTagVote(tag, city, dir){
+  var pd = personalTags[city];
+  var cur = pd.votes[tag.id] || 0;
+  var want = dir==="up" ? 1 : -1;
+  var delta;
+  if(cur===want){ delta=-want; delete pd.votes[tag.id]; }
+  else { delta = want-cur; pd.votes[tag.id]=want; }
+  tag.votes += delta;
+}
+
+function handleTagAction(id, act){
+  var found=findTag(id); if(!found) return;
+  var tag=found.tag, city=found.city;
+  var pd = personalTags[city];
+
+  if(act==="del"){
+    if(pd.mine.indexOf(id)===-1) return;
+    removeTag(id, city);
+    return;
+  }
+
+  applyTagVote(tag, city, act);
+  refreshTagMarker(tag);
+  renderTagsList();
+  cloudSet('shared_tags:'+city, tagsData[city], true);
+  cloudSet('personal_tags:'+city, pd, false);
+}
+
+function removeTag(id, city){
+  delete tagsData[city][id];
+  var pd = personalTags[city];
+  var idx = pd.mine.indexOf(id);
+  if(idx!==-1) pd.mine.splice(idx,1);
+  delete pd.votes[id];
+
+  var m=tagMarkers[id];if(m){map.removeLayer(m);delete tagMarkers[id];}
+  updateTagBadge();renderTagsList();
+  showToast("Tag removed.");
+
+  cloudSet('shared_tags:'+city, tagsData[city], true);
+  cloudSet('personal_tags:'+city, pd, false);
+}
+
+function openTagForm(latlng){
+  pendingLatLng=latlng;
+  document.getElementById("tagText").value="";
+  document.getElementById("tagForm").classList.add("show");
+  document.getElementById("overlay").classList.add("show");
+  setTimeout(function(){document.getElementById("tagText").focus();},60);
+}
+function closeTagForm(){
+  document.getElementById("tagForm").classList.remove("show");
+  document.getElementById("overlay").classList.remove("show");
+  pendingLatLng=null;
+}
+document.getElementById("tagCancel").onclick=closeTagForm;
+document.getElementById("overlay").onclick=closeTagForm;
+document.getElementById("tagSave").onclick=function(){
+  if(!dataLoaded){ showToast("Still loading the map's data…"); return; }
+  var text=document.getElementById("tagText").value.trim();
+  if(!text){showToast("Type something first!");return;}
+  if(!pendingLatLng){showToast("Something went wrong.");return;}
+
+  var city = getCityForLatLng(pendingLatLng.lat, pendingLatLng.lng);
+  var tag={
+    id:"t"+Date.now()+Math.random().toString(36).slice(2,6),
+    text:text.slice(0,42),lat:pendingLatLng.lat,lng:pendingLatLng.lng,
+    votes:1,ts:Date.now(),city:city
+  };
+  tagsData[city][tag.id]=tag;
+  personalTags[city].votes[tag.id]=1; // creator auto-upvotes their own tag
+  personalTags[city].mine.push(tag.id);
+
+  placeTagMarker(tag);
+  updateTagBadge();renderTagsList();
+  closeTagForm();exitAllModes();
+  showToast("Tag dropped!");
+
+  cloudSet('shared_tags:'+city, tagsData[city], true);
+  cloudSet('personal_tags:'+city, personalTags[city], false);
+};
+
+
+document.getElementById("tagsPanelClose").onclick=function(){
+  document.getElementById("tagsPanel").classList.remove("show");
+};
+
+/* Tags panel list — also 👍/👎 */
+function renderTagsList(){
+  var list=document.getElementById("tagsList");
+  var all=allTagsFlat();
+  if(!all.length){list.innerHTML='<div class="panel-empty">No tags yet — tap 🏷️ and drop the first one.</div>';return;}
+  var sorted=all.slice().sort(function(a,b){return b.votes-a.votes;});
+  list.innerHTML=sorted.map(function(t){
+    var pd = personalTags[t.city]||{mine:[]};
+    var mine = pd.mine.indexOf(t.id)!==-1;
+    return '<div class="tag-list-item">'
+      +'<div class="tag-list-dot"></div>'
+      +'<div class="tag-list-body">'
+      +'<div class="tag-list-text">'+esc(t.text)+'</div>'
+      +'<div class="tag-list-sub">'
+      +'<span class="tag-vote-btns">'
+      +'<button data-act="up" data-id="'+t.id+'" title="Like">👍</button>'
+      +'<span class="vote-n">'+t.votes+'</span>'
+      +'<button data-act="down" data-id="'+t.id+'" title="Dislike">👎</button>'
+      +'</span>'
+      +'<span>'+timeAgo(t.ts)+'</span>'
+      +(mine?'<button class="del-btn" data-act="del" data-id="'+t.id+'">Remove</button>':'')
+      +'</div></div></div>';
+  }).join("");
+  list.querySelectorAll("button[data-act]").forEach(function(btn){
+    btn.onclick=function(){ handleTagAction(btn.dataset.id, btn.dataset.act); };
+  });
+}
+
+document.getElementById("resetBtn").onclick=async function(){
+  var touched=[];
+  for(var ci=0; ci<CITY_KEYS.length; ci++){
+    var city=CITY_KEYS[ci];
+    var pp = personalPaint[city], shared = paintData[city];
+    var changed=false;
+
+    Object.keys(pp).forEach(function(cellKey){
+      var color=pp[cellKey], rec=shared[cellKey];
+      if(rec && rec.votes[color]){
+        rec.votes[color]--;
+        if(rec.votes[color]<=0) delete rec.votes[color];
+        if(Object.keys(rec.votes).length===0) delete shared[cellKey];
+        changed=true;
+      }
+    });
+    personalPaint[city]={};
+
+    var pd = personalTags[city];
+    pd.mine.slice().forEach(function(id){
+      if(tagsData[city][id]){
+        delete tagsData[city][id];
+        var m=tagMarkers[id]; if(m){map.removeLayer(m);delete tagMarkers[id];}
+        changed=true;
+      }
+      delete pd.votes[id];
+    });
+    Object.keys(pd.votes).forEach(function(id){
+      var tag=tagsData[city][id];
+      if(tag){ tag.votes -= pd.votes[id]; changed=true; }
+    });
+    personalTags[city]={votes:{},mine:[]};
+
+    if(changed) touched.push(city);
+  }
+
+  redrawCanvas();
+  updateTagBadge();renderTagsList();
+  showToast("Cleared your additions.");
+
+  for(var i=0;i<touched.length;i++){
+    var c=touched[i];
+    await cloudSet('shared_paint:'+c, paintData[c], true);
+    await cloudSet('personal_paint:'+c, personalPaint[c], false);
+    await cloudSet('shared_tags:'+c, tagsData[c], true);
+    await cloudSet('personal_tags:'+c, personalTags[c], false);
+  }
+};
+
+document.getElementById("placesBtn").onclick=function(){
+  showToast("Places feature is coming soon!");
+  /* Uncomment to enable the Places panel:
+  document.getElementById("placesPanel").classList.toggle("show");
+  document.getElementById("tagsPanel").classList.remove("show");
+  */
+};
+
+document.getElementById("placesPanelClose").onclick=function(){
+  document.getElementById("placesPanel").classList.remove("show");
+};
+
+function syncChecks(groupObj, itemClass) {
+  var group = document.getElementById(groupObj);
+  var items = document.querySelectorAll('.' + itemClass);
+  group.addEventListener('change', function(e) {
+    items.forEach(function(i) { i.checked = e.target.checked; });
+  });
+  items.forEach(function(i) {
+    i.addEventListener('change', function() {
+      var all = Array.from(items).every(function(c){return c.checked;});
+      var some = Array.from(items).some(function(c){return c.checked;});
+      group.checked = all;
+      group.indeterminate = some && !all;
+    });
+  });
+}
+syncChecks("chkGood", "chk-good");
+syncChecks("chkBad", "chk-bad");
+
+/* ═══════════════════════════════
+   SEARCH
+═══════════════════════════════ */
+var searchInput=document.getElementById("searchInput");
+var searchResults=document.getElementById("searchResults");
+var searchClear=document.getElementById("searchClear");
+
+function getResults(q){
+  q=q.trim().toLowerCase();if(!q)return[];
+  var out=[];
+  ZONES.forEach(function(z){
+    if(z.name.toLowerCase().includes(q)||(z.nameFa&&z.nameFa.includes(q)))
+      out.push({kind:"zone",label:z.name,sub:CATS[z.cat].label,color:CATS[z.cat].color,lat:z.lat,lng:z.lng});
+  });
+  allTagsFlat().forEach(function(t){
+    if(t.text.toLowerCase().includes(q))
+      out.push({kind:"tag",label:t.text,sub:"tag",color:"#555",lat:t.lat,lng:t.lng});
+  });
+  return out.slice(0,7);
+}
+function renderDrop(results){
+  if(!results.length){searchResults.style.display="none";searchResults.innerHTML="";return;}
+  searchResults.innerHTML=results.map(function(r,i){
+    return '<div class="search-result-item" data-i="'+i+'">'
+      +'<span class="search-result-dot" style="background:'+r.color+'"></span>'
+      +'<span>'+esc(r.label)+'</span>'
+      +'<span class="search-result-sub">'+esc(r.sub)+'</span>'
+      +'</div>';
+  }).join("");
+  searchResults.style.display="block";
+  var snap=results;
+  Array.from(searchResults.children).forEach(function(item,i){
+    item.onclick=function(){
+      var r=snap[i];
+      var targetCity = getCityForLatLng(r.lat, r.lng);
+      var citySelect = document.getElementById("citySelect");
+
+      // Auto-switch to the target city if a search pin is out of bounds
+      if(citySelect.value !== targetCity) {
+        citySelect.value = targetCity;
+        map.setMaxBounds(null);
+        map.setMinZoom(CITIES[targetCity].minZoom);
+        map.setView(CITIES[targetCity].center, CITIES[targetCity].defaultZoom, { animate: false });
+        map.setMaxBounds(CITIES[targetCity].bounds);
+        redrawCanvas();
+      }
+
+      map.flyTo([r.lat,r.lng],15,{duration:0.7});
+      searchResults.style.display="none";
+      searchInput.value="";searchClear.style.display="none";
+    };
+  });
+}
+searchInput.addEventListener("input",function(){
+  searchClear.style.display=searchInput.value?"block":"none";
+  renderDrop(getResults(searchInput.value));
+});
+searchClear.onclick=function(){
+  searchInput.value="";searchClear.style.display="none";
+  searchResults.style.display="none";searchInput.focus();
+};
+document.addEventListener("click",function(e){
+  if(!e.target.closest(".search-bar")) searchResults.style.display="none";
+});
+function closePanels(){
+  document.getElementById("tagsPanel").classList.remove("show");
+  document.getElementById("placesPanel").classList.remove("show");
+}
+
+/* ═══════════════════════════════
+   LOAD EVERYONE'S DATA, THEN RENDER
+═══════════════════════════════ */
+function renderAllTagMarkers(){
+  var seen={};
+  allTagsFlat().forEach(function(tag){
+    seen[tag.id]=true;
+    if(tagMarkers[tag.id]) refreshTagMarker(tag);
+    else placeTagMarker(tag);
+  });
+  Object.keys(tagMarkers).forEach(function(id){
+    if(!seen[id]){ map.removeLayer(tagMarkers[id]); delete tagMarkers[id]; }
+  });
+  applyTagDisplayMode();
+}
+
+async function loadAll(){
+  await Promise.all(CITY_KEYS.map(async function(c){
+    var results = await Promise.all([
+      cloudGet('shared_paint:'+c, true),
+      cloudGet('personal_paint:'+c, false),
+      cloudGet('shared_tags:'+c, true),
+      cloudGet('personal_tags:'+c, false)
+    ]);
+    paintData[c] = results[0] || {};
+    personalPaint[c] = results[1] || {};
+    tagsData[c] = results[2] || {};
+    personalTags[c] = results[3] || {votes:{},mine:[]};
+  }));
+  dataLoaded = true;
+  redrawCanvas();
+  renderAllTagMarkers();
+  updateTagBadge();
+  if(!hasCloud){
+    showToast("Running in solo mode — this browser only.");
+  }
+}
+
+/* Pulls in other browsers' changes periodically so the map stays live. */
+async function refreshShared(){
+  if(!dataLoaded || isPainting) return;
+  await Promise.all(CITY_KEYS.map(async function(c){
+    var sp = await cloudGet('shared_paint:'+c, true);
+    if(sp) paintData[c]=sp;
+    var st = await cloudGet('shared_tags:'+c, true);
+    if(st) tagsData[c]=st;
+  }));
+  redrawCanvas();
+  renderAllTagMarkers();
+}
+setInterval(function(){ refreshShared(); }, 20000);
+
+loadAll();
+
+})();
+</script>
 </body>
 </html>
