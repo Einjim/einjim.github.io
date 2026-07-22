@@ -485,28 +485,28 @@ var CAT_KEYS = Object.keys(CATS);
 var ZONES = [];
 
 /* ═══════════════════════════════
-   CLOUD / LOCAL STORAGE LAYER
+   CLOUD STORAGE LAYER
    Shared data = visible to every browser (this is the "multi-user" layer).
    Personal data = scoped to this browser only (this browser IS the "user",
    no sign-up needed — that scoping is handled for us).
-   Falls back to plain localStorage (solo mode, this browser only) if
-   window.storage isn't available, e.g. if this file is hosted outside
-   of a Claude artifact — multi-user sync specifically needs that API.
+   This uses ONLY window.storage (Anthropic's artifact-backed database) for
+   all painting/comment data — there is NO localStorage fallback for that
+   data anymore. If window.storage isn't available (e.g. this file is
+   opened outside of a Claude artifact), painting/tags simply won't persist
+   or sync — that's intentional, since a fallback would mean silently
+   reading/writing browser-local data instead of the shared database.
 ═══════════════════════════════ */
 var hasCloud = !!(window.storage && typeof window.storage.get === "function");
 
-function lsGet(k,fb){try{var v=localStorage.getItem(k);return v?JSON.parse(v):fb;}catch(e){return fb;}}
-function lsSet(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}
-
 async function cloudGet(key, shared){
-  if(!hasCloud) return lsGet("thm_"+key, null);
+  if(!hasCloud) return null;
   try{
     var r = await window.storage.get(key, !!shared);
     return r ? JSON.parse(r.value) : null;
   }catch(e){ return null; }
 }
 async function cloudSet(key, value, shared){
-  if(!hasCloud){ lsSet("thm_"+key, value); return true; }
+  if(!hasCloud){ return null; }
   try{ return await window.storage.set(key, JSON.stringify(value), !!shared); }
   catch(e){ return null; }
 }
@@ -514,7 +514,9 @@ async function cloudSet(key, value, shared){
 /* Stable anonymous per-browser ID (no sign-up). Used only to attribute one
    vote per person per cell/tag so merges across browsers are conflict-safe —
    never shown to anyone, never leaves this device except as an opaque key
-   inside a vote map. */
+   inside a vote map. This is NOT painting/comment content, so it's fine for
+   it to live in localStorage — it's just this browser's anonymous identity,
+   same idea as a random session cookie. */
 var BROWSER_ID = (function(){
   try{
     var id = localStorage.getItem("thm_browser_id");
@@ -538,11 +540,14 @@ function tallyPaintVoters(voters){
 
 /* ═══════════════════════════════
    STATE
-   paintData[city][cellKey]     = { lat, lng, voters:{browserId:catKey}, votes:{catKey:n}, ts }
-   personalPaint[city][cellKey] = catKey this browser voted for (local mirror of voters[BROWSER_ID])
-   tagsData[city][tagId]        = { id, text, lat, lng, ts, city, creatorId, voters:{browserId:1|-1}, votes }
-   personalTags[city]           = {} — kept only for the old-shape upgrade path; ownership/votes
-                                   now live on the tag itself via creatorId / voters[BROWSER_ID]
+   paintData[city][cellKey]     = { lat, lng, votes:{catKey:n}, ts }
+   personalPaint[city][cellKey] = catKey this browser voted for (local mirror,
+                                   itself persisted in the DATABASE via
+                                   'personal_paint:<city>', not localStorage)
+   tagsData[city][tagId]        = { id, text, lat, lng, ts, city, votes }
+   personalTags[city]           = { votes:{tagId:1|-1}, mine:[tagId,...] },
+                                   also persisted in the database via
+                                   'personal_tags:<city>'
 ═══════════════════════════════ */
 var paintData = {}, personalPaint = {}, tagsData = {}, personalTags = {};
 var dataLoaded = false;
@@ -705,6 +710,7 @@ function paintAt(x, y, color){
 }
 
 async function flushPaint(){
+  if(!hasCloud){ showToast("No database connection — this won't be saved."); return; }
   var cities = Object.keys(dirtyPaintCities);
   if(!cities.length) return;
   dirtyPaintCities = {};
@@ -1374,6 +1380,15 @@ function renderAllTagMarkers(){
 }
 
 async function loadAll(){
+  if(!hasCloud){
+    showToast("No database connection found — painting and tags are disabled.");
+    dataLoaded = true;
+    redrawCanvas();
+    renderAllTagMarkers();
+    updateTagBadge();
+    return;
+  }
+
   await Promise.all(CITY_KEYS.map(async function(c){
     var results = await Promise.all([
       cloudGet('shared_paint:'+c, true),
@@ -1390,9 +1405,6 @@ async function loadAll(){
   redrawCanvas();
   renderAllTagMarkers();
   updateTagBadge();
-  if(!hasCloud){
-    showToast("Running in solo mode — this browser only.");
-  }
 
   var seenIntro = await cloudGet('seen_intro', false);
   if(!seenIntro) showIntroHint();
@@ -1400,7 +1412,7 @@ async function loadAll(){
 
 /* Pulls in other browsers' changes periodically so the map stays live. */
 async function refreshShared(){
-  if(!dataLoaded || isPainting) return;
+  if(!dataLoaded || isPainting || !hasCloud) return;
   await Promise.all(CITY_KEYS.map(async function(c){
     var sp = await cloudGet('shared_paint:'+c, true);
     if(sp) paintData[c]=sp;
