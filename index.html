@@ -350,6 +350,13 @@ select.map-btn {
   <button class="map-btn" id="pixelBtn">🎨 Pixel mode</button>
   <button class="map-btn" id="placesBtn">📍 Places</button>
   <button class="map-btn" id="tagsBtn">🏷️ Tags <span id="tagCountBadge" style="display:none;background:#e55;color:#fff;border-radius:999px;padding:1px 6px;font-size:11px;margin-left:2px"></span></button>
+  <button class="map-btn" id="infoBtn">ℹ️ How it works</button>
+</div>
+
+<!-- Intro / how-it-works hint (shown on first visit, reopenable via ℹ️) -->
+<div class="mode-hint" id="introHint" style="flex-direction:column;align-items:flex-start;gap:8px;padding:14px 18px;max-width:min(360px,calc(100vw - 24px));white-space:normal">
+  <span id="introHintText" style="line-height:1.5"></span>
+  <button class="done-btn" id="introDoneBtn" style="align-self:flex-end">Got it</button>
 </div>
 
 <!-- Top Right -->
@@ -462,10 +469,10 @@ var CITY_KEYS = Object.keys(CITIES);
    CATEGORIES
 ═══════════════════════════════ */
 var CATS = {
-  suits:    { label:"Suits",    emoji:"👔", color:"#3E6BFF", rgba:"rgba(62,107,255,0.45)" },
-  rich:     { label:"Rich",     emoji:"🤑", color:"#1FAE63", rgba:"rgba(31,174,99,0.45)"  },
-  cool:     { label:"Cool",     emoji:"😎", color:"#F0B429", rgba:"rgba(240,180,41,0.45)" },
+  cool:     { label:"Hipsters", emoji:"🕶️", color:"#F0B429", rgba:"rgba(240,180,41,0.45)" },
   tourists: { label:"Tourists", emoji:"📸", color:"#E2452D", rgba:"rgba(226,69,45,0.45)"  },
+  rich:     { label:"Rich",     emoji:"🤑", color:"#1FAE63", rgba:"rgba(31,174,99,0.45)"  },
+  suits:    { label:"Suits",    emoji:"👔", color:"#3E6BFF", rgba:"rgba(62,107,255,0.45)" },
   uni:      { label:"Uni",      emoji:"🎓", color:"#2C2E78", rgba:"rgba(44,46,120,0.45)"  },
   normies:  { label:"Normies",  emoji:"🏠", color:"#9AA3AF", rgba:"rgba(154,163,175,0.45)"},
   crime:    { label:"Crime",    emoji:"🚨", color:"#3D3F46", rgba:"rgba(61,63,70,0.45)"   }
@@ -784,6 +791,25 @@ function setHint(txt){
 }
 
 document.getElementById("modeDoneBtn").onclick=exitAllModes;
+
+/* ═══════════════════════════════
+   INTRO / HOW-IT-WORKS HINT
+═══════════════════════════════ */
+var INTRO_COPY = "🗺️ This map is drawn entirely by people like you. 🎨 Pick a color below, then click or drag on the map to paint how a block feels. 🏷️ Tap the tag icon to drop a short comment anywhere. 👍👎 Tap any tag to vote it up or down. Every stroke is anonymous and blends with everyone else's — the most-painted color wins each spot.";
+document.getElementById("introHintText").textContent = INTRO_COPY;
+
+function showIntroHint(){
+  exitAllModes();
+  document.getElementById("introHint").classList.add("show");
+}
+function hideIntroHint(){
+  document.getElementById("introHint").classList.remove("show");
+}
+document.getElementById("introDoneBtn").onclick = function(){
+  hideIntroHint();
+  cloudSet('seen_intro', true, false);
+};
+document.getElementById("infoBtn").onclick = showIntroHint;
 
 document.getElementById("paintBtn").onclick=function(){
   if(!dataLoaded){ showToast("Still loading the map's data…"); return; }
@@ -1341,6 +1367,9 @@ async function loadAll(){
   if(!hasCloud){
     showToast("Running in solo mode — this browser only.");
   }
+
+  var seenIntro = await cloudGet('seen_intro', false);
+  if(!seenIntro) showIntroHint();
 }
 
 /* Pulls in other browsers' changes periodically so the map stays live. */
