@@ -485,28 +485,27 @@ var CAT_KEYS = Object.keys(CATS);
 var ZONES = [];
 
 /* ═══════════════════════════════
-   CLOUD / LOCAL STORAGE LAYER
-   Shared data = visible to every browser (this is the "multi-user" layer).
-   Personal data = scoped to this browser only (this browser IS the "user",
-   no sign-up needed — that scoping is handled for us).
-   Falls back to plain localStorage (solo mode, this browser only) if
-   window.storage isn't available, e.g. if this file is hosted outside
-   of a Claude artifact — multi-user sync specifically needs that API.
+   SHARED STORAGE LAYER
+   All paint and tag data lives exclusively in window.storage — the
+   artifact's persistent, server-side backend. shared=true means every
+   browser viewing this map reads/writes the same record; shared=false
+   is scoped to this browser (used only for tiny per-device flags like
+   "have I seen the intro", never for painting or comments).
+   There is deliberately NO localStorage fallback for map data: if
+   window.storage isn't available, painting/tagging are disabled rather
+   than silently saving somewhere only this one browser can see.
 ═══════════════════════════════ */
 var hasCloud = !!(window.storage && typeof window.storage.get === "function");
 
-function lsGet(k,fb){try{var v=localStorage.getItem(k);return v?JSON.parse(v):fb;}catch(e){return fb;}}
-function lsSet(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}
-
 async function cloudGet(key, shared){
-  if(!hasCloud) return lsGet("thm_"+key, null);
+  if(!hasCloud) return null;
   try{
     var r = await window.storage.get(key, !!shared);
     return r ? JSON.parse(r.value) : null;
   }catch(e){ return null; }
 }
 async function cloudSet(key, value, shared){
-  if(!hasCloud){ lsSet("thm_"+key, value); return true; }
+  if(!hasCloud) return null;
   try{ return await window.storage.set(key, JSON.stringify(value), !!shared); }
   catch(e){ return null; }
 }
