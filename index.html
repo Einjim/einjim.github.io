@@ -485,27 +485,28 @@ var CAT_KEYS = Object.keys(CATS);
 var ZONES = [];
 
 /* ═══════════════════════════════
-   SHARED STORAGE LAYER
-   All paint and tag data lives exclusively in window.storage — the
-   artifact's persistent, server-side backend. shared=true means every
-   browser viewing this map reads/writes the same record; shared=false
-   is scoped to this browser (used only for tiny per-device flags like
-   "have I seen the intro", never for painting or comments).
-   There is deliberately NO localStorage fallback for map data: if
-   window.storage isn't available, painting/tagging are disabled rather
-   than silently saving somewhere only this one browser can see.
+   CLOUD / LOCAL STORAGE LAYER
+   Shared data = visible to every browser (this is the "multi-user" layer).
+   Personal data = scoped to this browser only (this browser IS the "user",
+   no sign-up needed — that scoping is handled for us).
+   Falls back to plain localStorage (solo mode, this browser only) if
+   window.storage isn't available, e.g. if this file is hosted outside
+   of a Claude artifact — multi-user sync specifically needs that API.
 ═══════════════════════════════ */
 var hasCloud = !!(window.storage && typeof window.storage.get === "function");
 
+function lsGet(k,fb){try{var v=localStorage.getItem(k);return v?JSON.parse(v):fb;}catch(e){return fb;}}
+function lsSet(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}
+
 async function cloudGet(key, shared){
-  if(!hasCloud) return null;
+  if(!hasCloud) return lsGet("thm_"+key, null);
   try{
     var r = await window.storage.get(key, !!shared);
     return r ? JSON.parse(r.value) : null;
   }catch(e){ return null; }
 }
 async function cloudSet(key, value, shared){
-  if(!hasCloud) return null;
+  if(!hasCloud){ lsSet("thm_"+key, value); return true; }
   try{ return await window.storage.set(key, JSON.stringify(value), !!shared); }
   catch(e){ return null; }
 }
@@ -540,17 +541,16 @@ function tallyPaintVoters(voters){
    paintData[city][cellKey]     = { lat, lng, voters:{browserId:catKey}, votes:{catKey:n}, ts }
    personalPaint[city][cellKey] = catKey this browser voted for (local mirror of voters[BROWSER_ID])
    tagsData[city][tagId]        = { id, text, lat, lng, ts, city, creatorId, voters:{browserId:1|-1}, votes }
-   Ownership and votes for tags live entirely on the tag object itself
-   (creatorId / voters[BROWSER_ID]) — no separate personal-tags store needed.
+   personalTags[city]           = {} — kept only for the old-shape upgrade path; ownership/votes
+                                   now live on the tag itself via creatorId / voters[BROWSER_ID]
 ═══════════════════════════════ */
-var paintData = {}, personalPaint = {}, tagsData = {};
+var paintData = {}, personalPaint = {}, tagsData = {}, personalTags = {};
 var dataLoaded = false;
 var dirtyPaintCities = {};
-var pendingPaintCells = {}; // city -> {cellKey:true} touched since the last flush
 
 CITY_KEYS.forEach(function(c){
   paintData[c]={}; personalPaint[c]={};
-  tagsData[c]={}; pendingPaintCells[c]={};
+  tagsData[c]={}; personalTags[c]={votes:{},mine:[]};
 });
 
 /* ═══════════════════════════════
@@ -680,14 +680,15 @@ function applyPaintVote(lat, lng, catKey){
   if(mine === catKey) return null;
 
   var rec = paintData[cityKey][cell.key];
-  if(!rec){ rec = { lat:cell.lat, lng:cell.lng, voters:{}, votes:{}, ts:Date.now() }; paintData[cityKey][cell.key]=rec; }
-  if(!rec.voters) rec.voters = {};
+  if(!rec){ rec = { lat:cell.lat, lng:cell.lng, votes:{}, ts:Date.now() }; paintData[cityKey][cell.key]=rec; }
 
-  rec.voters[BROWSER_ID] = catKey;
-  rec.votes = tallyPaintVoters(rec.voters);
+  if(mine){
+    rec.votes[mine] = (rec.votes[mine]||0) - 1;
+    if(rec.votes[mine] <= 0) delete rec.votes[mine];
+  }
+  rec.votes[catKey] = (rec.votes[catKey]||0) + 1;
   rec.ts = Date.now();
   personalPaint[cityKey][cell.key] = catKey;
-  pendingPaintCells[cityKey][cell.key] = true;
   dirtyPaintCities[cityKey] = true;
   return rec;
 }
@@ -703,52 +704,15 @@ function paintAt(x, y, color){
   if(rec && pixelDisplayMode!==2) drawCellIfVisible(rec);
 }
 
-/* Re-fetches the latest shared paint data for a city and merges in only
-   THIS browser's own vote for each cell it touched since the last flush —
-   never the whole local blob. That's what keeps two people painting
-   different spots within the same few seconds from clobbering each other:
-   only our own ledger entry per cell gets asserted, everything else comes
-   from the freshest known copy. */
 async function flushPaint(){
   var cities = Object.keys(dirtyPaintCities);
   if(!cities.length) return;
   dirtyPaintCities = {};
   for(var i=0;i<cities.length;i++){
-    var c = cities[i];
-    var touched = Object.keys(pendingPaintCells[c]);
-    pendingPaintCells[c] = {};
-    if(!touched.length) continue;
-
-    var fresh = await cloudGet('shared_paint:'+c, true) || {};
-    touched.forEach(function(cellKey){
-      var myColor = personalPaint[c][cellKey]; // undefined = we removed/never had a vote here
-      var rec = fresh[cellKey] || paintData[c][cellKey];
-
-      if(myColor === undefined){
-        if(rec && rec.voters && rec.voters[BROWSER_ID] !== undefined){
-          delete rec.voters[BROWSER_ID];
-          rec.votes = tallyPaintVoters(rec.voters);
-          if(!Object.keys(rec.voters).length){ delete fresh[cellKey]; return; }
-        }
-        if(rec) fresh[cellKey] = rec;
-        return;
-      }
-
-      if(!rec){
-        var parts = cellKey.split(",");
-        rec = { lat:+parts[0], lng:+parts[1], voters:{}, votes:{}, ts:Date.now() };
-      }
-      if(!rec.voters) rec.voters = {};
-      rec.voters[BROWSER_ID] = myColor;
-      rec.votes = tallyPaintVoters(rec.voters);
-      rec.ts = Date.now();
-      fresh[cellKey] = rec;
-    });
-
-    paintData[c] = fresh;
-    await cloudSet('shared_paint:'+c, fresh, true);
+    var c=cities[i];
+    await cloudSet('shared_paint:'+c, paintData[c], true);
+    await cloudSet('personal_paint:'+c, personalPaint[c], false);
   }
-  redrawCanvas();
 }
 
 // Ensure paintings stick properly and retain pixel-sizes mapped geographically
@@ -1073,7 +1037,8 @@ function rotForId(id){var h=0;for(var i=0;i<id.length;i++)h=(h*31+id.charCodeAt(
 
 /* 👍 / 👎 like-dislike buttons on map pin */
 function renderTagIcon(tag){
-  var mine = tag.creatorId === BROWSER_ID;
+  var pd = personalTags[tag.city] || {mine:[]};
+  var mine = pd.mine.indexOf(tag.id) !== -1;
   return '<div class="tag-pin">'
     +'<span class="tag-votes">'
     +'<button data-act="up" data-id="'+tag.id+'" title="Like">👍</button>'
@@ -1128,75 +1093,48 @@ function wireTagBtns(m){
 
 /* One vote per browser per tag; clicking the same direction again undoes it
    (Reddit-style toggle) — this is what keeps the vote count an honest
-   count of distinct people, not a single person clicking repeatedly. Votes
-   live in tag.voters (a {browserId: 1|-1} ledger), so merging just our own
-   entry into the freshest copy of a tag can never clobber someone else's
-   concurrent vote on the same tag. */
-function tallyTagVotes(voters){
-  var sum=0;
-  Object.keys(voters||{}).forEach(function(uid){ sum += voters[uid]; });
-  return sum;
-}
-
-function applyTagVote(tag, dir){
-  if(!tag.voters) tag.voters = {};
+   count of distinct people, not a single person clicking repeatedly. */
+function applyTagVote(tag, city, dir){
+  var pd = personalTags[city];
+  var cur = pd.votes[tag.id] || 0;
   var want = dir==="up" ? 1 : -1;
-  if(tag.voters[BROWSER_ID] === want) delete tag.voters[BROWSER_ID];
-  else tag.voters[BROWSER_ID] = want;
-  tag.votes = tallyTagVotes(tag.voters);
+  var delta;
+  if(cur===want){ delta=-want; delete pd.votes[tag.id]; }
+  else { delta = want-cur; pd.votes[tag.id]=want; }
+  tag.votes += delta;
 }
 
 function handleTagAction(id, act){
   var found=findTag(id); if(!found) return;
   var tag=found.tag, city=found.city;
+  var pd = personalTags[city];
 
   if(act==="del"){
-    if(tag.creatorId !== BROWSER_ID) return;
+    if(pd.mine.indexOf(id)===-1) return;
     removeTag(id, city);
     return;
   }
 
-  applyTagVote(tag, act);
+  applyTagVote(tag, city, act);
   refreshTagMarker(tag);
   renderTagsList();
-  flushTags(city);
+  cloudSet('shared_tags:'+city, tagsData[city], true);
+  cloudSet('personal_tags:'+city, pd, false);
 }
 
 function removeTag(id, city){
   delete tagsData[city][id];
+  var pd = personalTags[city];
+  var idx = pd.mine.indexOf(id);
+  if(idx!==-1) pd.mine.splice(idx,1);
+  delete pd.votes[id];
+
   var m=tagMarkers[id];if(m){map.removeLayer(m);delete tagMarkers[id];}
   updateTagBadge();renderTagsList();
   showToast("Tag removed.");
-  flushTags(city);
-}
 
-/* Re-fetches the latest shared tags for a city and merges in only THIS
-   browser's own change: a tag it just created, its own vote on someone
-   else's tag, or the deletion of its own tag — so a vote or a brand-new
-   tag from another browser in the last few seconds never gets lost. */
-async function flushTags(city){
-  var fresh = await cloudGet('shared_tags:'+city, true) || {};
-  var local = tagsData[city];
-
-  Object.keys(fresh).forEach(function(id){
-    if(fresh[id].creatorId === BROWSER_ID && !local[id]) delete fresh[id];
-  });
-  Object.keys(local).forEach(function(id){
-    var mine = local[id];
-    if(mine.creatorId === BROWSER_ID && !fresh[id]){
-      fresh[id] = mine;
-    } else if(mine.voters && mine.voters[BROWSER_ID] !== undefined && fresh[id]){
-      if(!fresh[id].voters) fresh[id].voters = {};
-      fresh[id].voters[BROWSER_ID] = mine.voters[BROWSER_ID];
-      fresh[id].votes = tallyTagVotes(fresh[id].voters);
-    }
-  });
-
-  tagsData[city] = fresh;
-  await cloudSet('shared_tags:'+city, fresh, true);
-  renderAllTagMarkers();
-  updateTagBadge();
-  renderTagsList();
+  cloudSet('shared_tags:'+city, tagsData[city], true);
+  cloudSet('personal_tags:'+city, pd, false);
 }
 
 function openTagForm(latlng){
@@ -1213,7 +1151,7 @@ function closeTagForm(){
 }
 document.getElementById("tagCancel").onclick=closeTagForm;
 document.getElementById("overlay").onclick=closeTagForm;
-document.getElementById("tagSave").onclick=async function(){
+document.getElementById("tagSave").onclick=function(){
   if(!dataLoaded){ showToast("Still loading the map's data…"); return; }
   var text=document.getElementById("tagText").value.trim();
   if(!text){showToast("Type something first!");return;}
@@ -1223,18 +1161,19 @@ document.getElementById("tagSave").onclick=async function(){
   var tag={
     id:"t"+Date.now()+Math.random().toString(36).slice(2,6),
     text:text.slice(0,42),lat:pendingLatLng.lat,lng:pendingLatLng.lng,
-    ts:Date.now(),city:city,
-    creatorId:BROWSER_ID, voters:{}, votes:1
+    votes:1,ts:Date.now(),city:city
   };
-  tag.voters[BROWSER_ID]=1; // creator auto-upvotes their own tag
   tagsData[city][tag.id]=tag;
+  personalTags[city].votes[tag.id]=1; // creator auto-upvotes their own tag
+  personalTags[city].mine.push(tag.id);
 
   placeTagMarker(tag);
   updateTagBadge();renderTagsList();
   closeTagForm();exitAllModes();
   showToast("Tag dropped!");
 
-  await flushTags(city);
+  cloudSet('shared_tags:'+city, tagsData[city], true);
+  cloudSet('personal_tags:'+city, personalTags[city], false);
 };
 
 
@@ -1249,7 +1188,8 @@ function renderTagsList(){
   if(!all.length){list.innerHTML='<div class="panel-empty">No tags yet — tap 🏷️ and drop the first one.</div>';return;}
   var sorted=all.slice().sort(function(a,b){return b.votes-a.votes;});
   list.innerHTML=sorted.map(function(t){
-    var mine = t.creatorId === BROWSER_ID;
+    var pd = personalTags[t.city]||{mine:[]};
+    var mine = pd.mine.indexOf(t.id)!==-1;
     return '<div class="tag-list-item">'
       +'<div class="tag-list-dot"></div>'
       +'<div class="tag-list-body">'
@@ -1270,47 +1210,51 @@ function renderTagsList(){
 }
 
 document.getElementById("resetBtn").onclick=async function(){
-  var touchedTagCities=[];
+  var touched=[];
   for(var ci=0; ci<CITY_KEYS.length; ci++){
     var city=CITY_KEYS[ci];
     var pp = personalPaint[city], shared = paintData[city];
+    var changed=false;
 
     Object.keys(pp).forEach(function(cellKey){
-      var rec=shared[cellKey];
-      if(rec && rec.voters && rec.voters[BROWSER_ID] !== undefined){
-        delete rec.voters[BROWSER_ID];
-        rec.votes = tallyPaintVoters(rec.voters);
-        if(!Object.keys(rec.voters).length) delete shared[cellKey];
+      var color=pp[cellKey], rec=shared[cellKey];
+      if(rec && rec.votes[color]){
+        rec.votes[color]--;
+        if(rec.votes[color]<=0) delete rec.votes[color];
+        if(Object.keys(rec.votes).length===0) delete shared[cellKey];
+        changed=true;
       }
-      pendingPaintCells[city][cellKey] = true;
-      dirtyPaintCities[city] = true;
     });
     personalPaint[city]={};
 
-    var dict = tagsData[city];
-    var tagsChanged=false;
-    Object.keys(dict).forEach(function(id){
-      var tag=dict[id];
-      if(tag.creatorId===BROWSER_ID){
-        delete dict[id];
+    var pd = personalTags[city];
+    pd.mine.slice().forEach(function(id){
+      if(tagsData[city][id]){
+        delete tagsData[city][id];
         var m=tagMarkers[id]; if(m){map.removeLayer(m);delete tagMarkers[id];}
-        tagsChanged=true;
-      } else if(tag.voters && tag.voters[BROWSER_ID] !== undefined){
-        delete tag.voters[BROWSER_ID];
-        tag.votes = tallyTagVotes(tag.voters);
-        tagsChanged=true;
+        changed=true;
       }
+      delete pd.votes[id];
     });
-    if(tagsChanged) touchedTagCities.push(city);
+    Object.keys(pd.votes).forEach(function(id){
+      var tag=tagsData[city][id];
+      if(tag){ tag.votes -= pd.votes[id]; changed=true; }
+    });
+    personalTags[city]={votes:{},mine:[]};
+
+    if(changed) touched.push(city);
   }
 
   redrawCanvas();
   updateTagBadge();renderTagsList();
   showToast("Cleared your additions.");
 
-  await flushPaint();
-  for(var j=0;j<touchedTagCities.length;j++){
-    await flushTags(touchedTagCities[j]);
+  for(var i=0;i<touched.length;i++){
+    var c=touched[i];
+    await cloudSet('shared_paint:'+c, paintData[c], true);
+    await cloudSet('personal_paint:'+c, personalPaint[c], false);
+    await cloudSet('shared_tags:'+c, tagsData[c], true);
+    await cloudSet('personal_tags:'+c, personalTags[c], false);
   }
 };
 
@@ -1429,27 +1373,18 @@ function renderAllTagMarkers(){
   applyTagDisplayMode();
 }
 
-function derivePersonalPaint(city){
-  var out = {};
-  var cells = paintData[city];
-  Object.keys(cells).forEach(function(cellKey){
-    var rec = cells[cellKey];
-    if(rec.voters && rec.voters[BROWSER_ID] !== undefined){
-      out[cellKey] = rec.voters[BROWSER_ID];
-    }
-  });
-  return out;
-}
-
 async function loadAll(){
   await Promise.all(CITY_KEYS.map(async function(c){
     var results = await Promise.all([
       cloudGet('shared_paint:'+c, true),
-      cloudGet('shared_tags:'+c, true)
+      cloudGet('personal_paint:'+c, false),
+      cloudGet('shared_tags:'+c, true),
+      cloudGet('personal_tags:'+c, false)
     ]);
     paintData[c] = results[0] || {};
-    tagsData[c] = results[1] || {};
-    personalPaint[c] = derivePersonalPaint(c);
+    personalPaint[c] = results[1] || {};
+    tagsData[c] = results[2] || {};
+    personalTags[c] = results[3] || {votes:{},mine:[]};
   }));
   dataLoaded = true;
   redrawCanvas();
@@ -1468,14 +1403,12 @@ async function refreshShared(){
   if(!dataLoaded || isPainting) return;
   await Promise.all(CITY_KEYS.map(async function(c){
     var sp = await cloudGet('shared_paint:'+c, true);
-    if(sp){ paintData[c]=sp; personalPaint[c]=derivePersonalPaint(c); }
+    if(sp) paintData[c]=sp;
     var st = await cloudGet('shared_tags:'+c, true);
     if(st) tagsData[c]=st;
   }));
   redrawCanvas();
   renderAllTagMarkers();
-  updateTagBadge();
-  renderTagsList();
 }
 setInterval(function(){ refreshShared(); }, 20000);
 
