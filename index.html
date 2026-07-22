@@ -511,12 +511,38 @@ async function cloudSet(key, value, shared){
   catch(e){ return null; }
 }
 
+/* Stable anonymous per-browser ID (no sign-up). Used only to attribute one
+   vote per person per cell/tag so merges across browsers are conflict-safe —
+   never shown to anyone, never leaves this device except as an opaque key
+   inside a vote map. */
+var BROWSER_ID = (function(){
+  try{
+    var id = localStorage.getItem("thm_browser_id");
+    if(!id){ id = "u"+Date.now().toString(36)+Math.random().toString(36).slice(2,10); localStorage.setItem("thm_browser_id", id); }
+    return id;
+  }catch(e){ return "u"+Math.random().toString(36).slice(2,10); }
+})();
+
+/* Turn a {browserId: choice} ledger into {choice: count}. Storing the raw
+   ledger (not just running totals) is what makes merging two browsers'
+   updates safe: each browser only ever writes its own key in the map, so
+   combining two snapshots can never double-count or lose a vote. */
+function tallyPaintVoters(voters){
+  var votes={};
+  Object.keys(voters||{}).forEach(function(uid){
+    var c=voters[uid];
+    votes[c]=(votes[c]||0)+1;
+  });
+  return votes;
+}
+
 /* ═══════════════════════════════
    STATE
-   paintData[city][cellKey]     = { lat, lng, votes:{catKey:n}, ts }
-   personalPaint[city][cellKey] = catKey this browser voted for
-   tagsData[city][tagId]        = { id, text, lat, lng, votes, ts, city }
-   personalTags[city]           = { votes:{tagId:1|-1}, mine:[tagId,...] }
+   paintData[city][cellKey]     = { lat, lng, voters:{browserId:catKey}, votes:{catKey:n}, ts }
+   personalPaint[city][cellKey] = catKey this browser voted for (local mirror of voters[BROWSER_ID])
+   tagsData[city][tagId]        = { id, text, lat, lng, ts, city, creatorId, voters:{browserId:1|-1}, votes }
+   personalTags[city]           = {} — kept only for the old-shape upgrade path; ownership/votes
+                                   now live on the tag itself via creatorId / voters[BROWSER_ID]
 ═══════════════════════════════ */
 var paintData = {}, personalPaint = {}, tagsData = {}, personalTags = {};
 var dataLoaded = false;
